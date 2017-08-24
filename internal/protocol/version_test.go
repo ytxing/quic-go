@@ -9,15 +9,26 @@ var _ = Describe("Version", func() {
 	// version numbers taken from the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 	It("has the right gQUIC version number", func() {
 		Expect(Version39).To(BeEquivalentTo(0x51303339))
+		Expect(Version41).To(BeEquivalentTo(0x51303431))
 	})
 
 	It("says if a version supports TLS", func() {
 		Expect(Version39.UsesTLS()).To(BeFalse())
+		Expect(Version41.UsesTLS()).To(BeFalse())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
+	})
+
+	It("says if a version support the IETF STREAM frame format", func() {
+		Expect(Version37.UsesIETFStreamFrame()).To(BeFalse())
+		Expect(Version38.UsesIETFStreamFrame()).To(BeFalse())
+		Expect(Version39.UsesIETFStreamFrame()).To(BeFalse())
+		Expect(Version41.UsesIETFStreamFrame()).To(BeTrue())
+		Expect(VersionTLS.UsesIETFStreamFrame()).To(BeTrue())
 	})
 
 	It("has the right string representation", func() {
 		Expect(Version39.String()).To(Equal("gQUIC 39"))
+		Expect(Version41.String()).To(Equal("gQUIC 41"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
@@ -30,6 +41,7 @@ var _ = Describe("Version", func() {
 
 	It("has the right representation for the H2 Alt-Svc tag", func() {
 		Expect(Version39.ToAltSvc()).To(Equal("39"))
+		Expect(Version41.ToAltSvc()).To(Equal("41"))
 		Expect(VersionTLS.ToAltSvc()).To(Equal("101"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303133).ToAltSvc()).To(Equal("13"))
