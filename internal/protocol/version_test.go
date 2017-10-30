@@ -19,11 +19,15 @@ var _ = Describe("Version", func() {
 	})
 
 	It("says if a version support the IETF STREAM frame format", func() {
-		Expect(Version37.UsesIETFStreamFrame()).To(BeFalse())
-		Expect(Version38.UsesIETFStreamFrame()).To(BeFalse())
 		Expect(Version39.UsesIETFStreamFrame()).To(BeFalse())
 		Expect(Version41.UsesIETFStreamFrame()).To(BeTrue())
 		Expect(VersionTLS.UsesIETFStreamFrame()).To(BeTrue())
+	})
+
+	It("says if a version support the IETF ACK frame format", func() {
+		Expect(Version39.UsesIETFAckFrame()).To(BeFalse())
+		Expect(Version41.UsesIETFAckFrame()).To(BeTrue())
+		Expect(VersionTLS.UsesIETFAckFrame()).To(BeTrue())
 	})
 
 	It("has the right string representation", func() {

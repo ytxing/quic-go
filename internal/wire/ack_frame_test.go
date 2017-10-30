@@ -11,6 +11,16 @@ import (
 )
 
 var _ = Describe("AckFrame", func() {
+	const (
+		versionGQUICAckFrame = versionBigEndian
+		versionIETFAckFrame  = protocol.Version41
+	)
+
+	BeforeEach(func() {
+		Expect(versionGQUICAckFrame.UsesIETFAckFrame()).To(BeFalse())
+		Expect(versionIETFAckFrame.UsesIETFAckFrame()).To(BeTrue())
+	})
+
 	Context("when parsing", func() {
 		It("accepts a sample frame", func() {
 			b := bytes.NewReader([]byte{0x40,
@@ -19,7 +29,7 @@ var _ = Describe("AckFrame", func() {
 				0x1c, // block length
 				0,
 			})
-			frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+			frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x1c)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
@@ -34,7 +44,7 @@ var _ = Describe("AckFrame", func() {
 				0x0, // block length
 				0,
 			})
-			frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+			frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0)))
@@ -49,7 +59,7 @@ var _ = Describe("AckFrame", func() {
 				0x1, // block length
 				0,
 			})
-			frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+			frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x10)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0x10)))
@@ -68,7 +78,7 @@ var _ = Describe("AckFrame", func() {
 				0x2, 0, 0, // 3rd timestamp
 				0x1, 0, 0, // 4th timestamp
 			})
-			_, err := ParseAckFrame(b, protocol.VersionWhatever)
+			_, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -82,7 +92,7 @@ var _ = Describe("AckFrame", func() {
 				0x1d, // block length
 				0,
 			})
-			_, err := ParseAckFrame(b, protocol.VersionWhatever)
+			_, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).To(MatchError(ErrInvalidAckRanges))
 		})
 
@@ -93,7 +103,7 @@ var _ = Describe("AckFrame", func() {
 				0x0, // block length
 				0,
 			})
-			_, err := ParseAckFrame(b, protocol.VersionWhatever)
+			_, err := ParseAckFrame(b, versionGQUICAckFrame)
 			Expect(err).To(MatchError(ErrInvalidFirstAckRange))
 		})
 
@@ -194,7 +204,7 @@ var _ = Describe("AckFrame", func() {
 					0x2, 0x10, // 2nd block
 					0,
 				})
-				frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+				frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x18)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -215,7 +225,7 @@ var _ = Describe("AckFrame", func() {
 					0x2, 0x15, // 2nd block
 					0,
 				})
-				_, err := ParseAckFrame(b, protocol.VersionWhatever)
+				_, err := ParseAckFrame(b, versionGQUICAckFrame)
 				Expect(err).To(MatchError(ErrInvalidAckRanges))
 			})
 
@@ -226,7 +236,7 @@ var _ = Describe("AckFrame", func() {
 					0, // num ACK blocks
 					0,
 				})
-				_, err := ParseAckFrame(b, protocol.VersionWhatever)
+				_, err := ParseAckFrame(b, versionGQUICAckFrame)
 				Expect(err).To(MatchError(ErrInvalidAckRanges))
 			})
 
@@ -244,7 +254,7 @@ var _ = Describe("AckFrame", func() {
 					0x1, 0x13, // 7th block
 					0,
 				})
-				frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+				frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x27)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -271,7 +281,7 @@ var _ = Describe("AckFrame", func() {
 					0x2, 0x12, // 4th block
 					0,
 				})
-				frame, err := ParseAckFrame(b, protocol.VersionWhatever)
+				frame, err := ParseAckFrame(b, versionGQUICAckFrame)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x52)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -978,10 +988,10 @@ var _ = Describe("AckFrame", func() {
 						LowestAcked:  ackRanges[len(ackRanges)-1].First,
 						AckRanges:    ackRanges,
 					}
-					err := frameOrig.Write(b, protocol.VersionWhatever)
+					err := frameOrig.Write(b, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
-					frame, err := ParseAckFrame(r, protocol.VersionWhatever)
+					frame, err := ParseAckFrame(r, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
 					Expect(frame.LowestAcked).To(Equal(ackRanges[254].First))
@@ -1000,10 +1010,10 @@ var _ = Describe("AckFrame", func() {
 						LowestAcked:  ackRanges[len(ackRanges)-1].First,
 						AckRanges:    ackRanges,
 					}
-					err := frameOrig.Write(b, protocol.VersionWhatever)
+					err := frameOrig.Write(b, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
-					frame, err := ParseAckFrame(r, protocol.VersionWhatever)
+					frame, err := ParseAckFrame(r, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
 					Expect(frame.LowestAcked).To(Equal(ackRanges[255/4].First))
@@ -1021,10 +1031,10 @@ var _ = Describe("AckFrame", func() {
 						LowestAcked:  ackRanges[len(ackRanges)-1].First,
 						AckRanges:    ackRanges,
 					}
-					err := frameOrig.Write(b, protocol.VersionWhatever)
+					err := frameOrig.Write(b, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
-					frame, err := ParseAckFrame(r, protocol.VersionWhatever)
+					frame, err := ParseAckFrame(r, versionGQUICAckFrame)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
 					Expect(frame.AckRanges).To(HaveLen(2))

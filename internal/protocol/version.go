@@ -44,7 +44,12 @@ func (vn VersionNumber) UsesTLS() bool {
 
 // UsesIETFStreamFrame says if the version uses the IETF format for the STREAM frame
 func (vn VersionNumber) UsesIETFStreamFrame() bool {
-	return vn != Version39 {
+	return vn != Version39
+}
+
+// UsesIETFAckFrame says if the version uses the IETF format for the ACK frame
+func (vn VersionNumber) UsesIETFAckFrame() bool {
+	return vn != Version39
 }
 
 func (vn VersionNumber) String() string {
