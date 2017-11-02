@@ -1,0 +1,31 @@
+version: 2
+jobs:
+  "on amd64":
+    docker:
+      - image: circleci/golang:1.9
+    working_directory: /go/src/github.com/lucas-clemente/quic-go
+    environment:
+      - GOARCH: "amd64"
+
+    steps:
+      - checkout
+      - run: go env # for debugging
+      - run: go get -v -t -d ./...
+      - run: go get github.com/onsi/ginkgo/ginkgo
+      - run: go get github.com/onsi/gomega
+      - run: ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+
+  "on i386":
+    docker:
+      - image: circleci/golang:1.9
+    working_directory: /go/src/github.com/lucas-clemente/quic-go
+    environment:
+      - GOARCH: "i386"
+
+    steps:
+      - checkout
+      - run: go env # for debugging
+      - run: go get -v -t -d ./...
+      - run: go get github.com/onsi/ginkgo/ginkgo
+      - run: go get github.com/onsi/gomega
+      - run: ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
