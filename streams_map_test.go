@@ -271,15 +271,6 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			Context("accepting streams", func() {
-				It("does nothing if no stream is opened", func() {
-					var accepted bool
-					go func() {
-						_, _ = m.AcceptStream()
-						accepted = true
-					}()
-					Consistently(func() bool { return accepted }).Should(BeFalse())
-				})
-
 				It("starts with stream 1, if the crypto stream is stream 0", func() {
 					setNewStreamsMap(protocol.PerspectiveServer, versionIETFFrames)
 					var str streamI
@@ -323,29 +314,7 @@ var _ = Describe("Streams Map", func() {
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
-				It("returns to multiple accepts", func() {
-					var str1, str2 streamI
-					go func() {
-						defer GinkgoRecover()
-						var err error
-						str1, err = m.AcceptStream()
-						Expect(err).ToNot(HaveOccurred())
-					}()
-					go func() {
-						defer GinkgoRecover()
-						var err error
-						str2, err = m.AcceptStream()
-						Expect(err).ToNot(HaveOccurred())
-					}()
-					_, err := m.GetOrOpenStream(5) // opens stream 3 and 5
-					Expect(err).ToNot(HaveOccurred())
-					Eventually(func() streamI { return str1 }).ShouldNot(BeNil())
-					Eventually(func() streamI { return str2 }).ShouldNot(BeNil())
-					Expect(str1.StreamID()).ToNot(Equal(str2.StreamID()))
-					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(3 + 5))
-				})
-
-				It("waits a new stream is available", func() {
+				It("waits until a new stream is available", func() {
 					var str streamI
 					go func() {
 						defer GinkgoRecover()
@@ -378,32 +347,36 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("blocks after accepting a stream", func() {
-					var accepted bool
 					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+					done := make(chan struct{})
 					go func() {
 						defer GinkgoRecover()
 						_, _ = m.AcceptStream()
-						accepted = true
+						close(done)
 					}()
-					Consistently(func() bool { return accepted }).Should(BeFalse())
+					Consistently(done).ShouldNot(BeClosed())
+					//  make sure we don't leak the goroutine
+					m.GetOrOpenStream(5)
+					Eventually(done).Should(BeClosed())
 				})
 
 				It("stops waiting when an error is registered", func() {
 					testErr := errors.New("testErr")
-					var acceptErr error
+					errChan := make(chan error)
 					go func() {
-						_, acceptErr = m.AcceptStream()
+						_, err := m.AcceptStream()
+						errChan <- err
 					}()
-					Consistently(func() error { return acceptErr }).ShouldNot(HaveOccurred())
+					Consistently(errChan).ShouldNot(Receive())
 					m.CloseWithError(testErr)
-					Eventually(func() error { return acceptErr }).Should(MatchError(testErr))
+					Eventually(errChan).Should(Receive(MatchError(testErr)))
 				})
 
-				It("immediately returns when Accept is called after an error was registered", func() {
+				It("immediately returns after an error was registered", func() {
 					testErr := errors.New("testErr")
 					m.CloseWithError(testErr)
 					_, err := m.AcceptStream()
@@ -424,7 +397,7 @@ var _ = Describe("Streams Map", func() {
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
-				It("rejects streams with odds IDs, which are lower thatn the highest server-side stream", func() {
+				It("rejects streams with odds IDs, which are lower than the highest server-side stream", func() {
 					_, err := m.GetOrOpenStream(6)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = m.GetOrOpenStream(5)

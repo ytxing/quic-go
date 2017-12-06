@@ -106,6 +106,7 @@ type StreamError interface {
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// Since stream 1 is reserved for the crypto stream, the first stream is either 2 (for a client) or 3 (for a server).
+	// It must not be called concurrently.
 	AcceptStream() (Stream, error)
 	// OpenStream opens a new QUIC stream, returning a special error when the peer's concurrent stream limit is reached.
 	// New streams always have the smallest possible stream ID.
