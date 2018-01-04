@@ -16,17 +16,27 @@ type streamsMap struct {
 
 	perspective protocol.Perspective
 
-	streams map[protocol.StreamID]streamI
+	incomingStreams    map[protocol.StreamID]streamI
+	outgoingStreams    map[protocol.StreamID]streamI
+	incomingUniStreams map[protocol.StreamID]receiveStreamI
+	outgoingUniStreams map[protocol.StreamID]sendStreamI
 
-	nextStreamToOpen          protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
+	nextStreamToOpen      protocol.StreamID // StreamID of the next stream that will be returned by OpenStream()
+	nextUniStreamToOpen   protocol.StreamID // StreamID of the next stream that will be returned by OpenUniStream()
+	nextStreamToAccept    protocol.StreamID // StreamID of the next stream that will be returned by AcceptStream()
+	nextUniStreamToAccept protocol.StreamID // StreamID of the next stream that will be returned by AcceptUniStream()
+
 	highestStreamOpenedByPeer protocol.StreamID
-	nextStreamOrErrCond       sync.Cond
-	openStreamOrErrCond       sync.Cond
 
-	closeErr           error
-	nextStreamToAccept protocol.StreamID
+	acceptStreamOrErrCond    sync.Cond
+	acceptUniStreamOrErrCond sync.Cond
+	openStreamOrErrCond      sync.Cond
+	openUniStreamOrErrCond   sync.Cond
 
-	newStream newStreamLambda
+	closeErr error
+
+	newStream     newStreamLambda
+	newSendStream func(protocol.StreamID) sendStreamI
 }
 
 var _ streamManager = &streamsMap{}
@@ -37,20 +47,29 @@ var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
 func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamManager {
 	sm := streamsMap{
-		perspective: pers,
-		streams:     make(map[protocol.StreamID]streamI),
-		newStream:   newStream,
+		perspective:        pers,
+		newStream:          newStream,
+		incomingStreams:    make(map[protocol.StreamID]streamI),
+		outgoingStreams:    make(map[protocol.StreamID]streamI),
+		incomingUniStreams: make(map[protocol.StreamID]receiveStreamI),
+		outgoingUniStreams: make(map[protocol.StreamID]sendStreamI),
 	}
-	sm.nextStreamOrErrCond.L = &sm.mutex
+	sm.acceptStreamOrErrCond.L = &sm.mutex
+	sm.acceptUniStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
+	sm.openUniStreamOrErrCond.L = &sm.mutex
 
-	nextClientInitiatedStream := protocol.StreamID(1)
-	nextServerInitiatedStream := protocol.StreamID(2)
+	nextClientInitiatedStream := protocol.StreamID(4) // 0 is the crypto stream, and is managed separately
+	nextServerInitiatedStream := protocol.StreamID(1)
+	nextClientInitiatedUniStream := protocol.StreamID(2)
+	nextServerInitiatedUniStream := protocol.StreamID(3)
 	if pers == protocol.PerspectiveServer {
 		sm.nextStreamToOpen = nextServerInitiatedStream
+		sm.nextUniStreamToOpen = nextServerInitiatedUniStream
 		sm.nextStreamToAccept = nextClientInitiatedStream
 	} else {
 		sm.nextStreamToOpen = nextClientInitiatedStream
+		sm.nextUniStreamToOpen = nextClientInitiatedUniStream
 		sm.nextStreamToAccept = nextServerInitiatedStream
 	}
 	return &sm
@@ -59,16 +78,13 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamM
 // getStreamPerspective says which side should initiate a stream
 func (m *streamsMap) streamInitiatedBy(id protocol.StreamID) protocol.Perspective {
 	if id%2 == 0 {
-		return protocol.PerspectiveServer
+		return protocol.PerspectiveClient
 	}
-	return protocol.PerspectiveClient
+	return protocol.PerspectiveServer
 }
 
-func (m *streamsMap) nextStreamID(id protocol.StreamID) protocol.StreamID {
-	if m.perspective == protocol.PerspectiveServer && id == 0 {
-		return 1
-	}
-	return id + 2
+func (m *streamsMap) isUniStream(id protocol.StreamID) bool {
+	return id&0x2 > 0
 }
 
 func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
@@ -110,13 +126,13 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 		return nil, nil
 	}
 
-	for sid := m.nextStreamID(m.highestStreamOpenedByPeer); sid <= id; sid = m.nextStreamID(sid) {
+	for sid := m.highestStreamOpenedByPeer + 4; sid <= id; sid += 4 {
 		if _, err := m.openRemoteStream(sid); err != nil {
 			return nil, err
 		}
 	}
 
-	m.nextStreamOrErrCond.Broadcast()
+	m.acceptStreamOrErrCond.Broadcast()
 	return m.streams[id], nil
 }
 
@@ -135,11 +151,10 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 func (m *streamsMap) openStreamImpl() (streamI, error) {
 	s := m.newStream(m.nextStreamToOpen)
 	m.putStream(s)
-	m.nextStreamToOpen = m.nextStreamID(m.nextStreamToOpen)
+	m.nextStreamToOpen += 4
 	return s, nil
 }
 
-// OpenStream opens the next available stream
 func (m *streamsMap) OpenStream() (Stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -169,6 +184,42 @@ func (m *streamsMap) OpenStreamSync() (Stream, error) {
 	}
 }
 
+func (m *streamsMap) openUniStreamImpl() (sendStreamI, error) {
+	s := m.newSendStream(m.nextUniStreamToOpen)
+	m.putSendStream(s)
+	m.nextUniStreamToOpen += 4
+	return s, nil
+}
+
+func (m *streamsMap) OpenUniStream() (SendStream, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+	return m.openUniStreamImpl()
+}
+
+func (m *streamsMap) OpenUniStreamSync() (SendStream, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for {
+		if m.closeErr != nil {
+			return nil, m.closeErr
+		}
+		str, err := m.openUniStreamImpl()
+		if err == nil {
+			return str, err
+		}
+		if err != nil && err != qerr.TooManyOpenStreams {
+			return nil, err
+		}
+		m.openUniStreamOrErrCond.Wait()
+	}
+}
+
 // AcceptStream returns the next stream opened by the peer
 // it blocks until a new stream is opened
 func (m *streamsMap) AcceptStream() (Stream, error) {
@@ -180,25 +231,54 @@ func (m *streamsMap) AcceptStream() (Stream, error) {
 		if m.closeErr != nil {
 			return nil, m.closeErr
 		}
-		str, ok = m.streams[m.nextStreamToAccept]
+		str, ok = m.incomingStreams[m.nextStreamToAccept]
 		if ok {
 			break
 		}
-		m.nextStreamOrErrCond.Wait()
+		m.acceptStreamOrErrCond.Wait()
 	}
-	m.nextStreamToAccept += 2
+	m.nextStreamToAccept += 4
+	return str, nil
+}
+
+// AcceptStream returns the next stream opened by the peer
+// it blocks until a new stream is opened
+func (m *streamsMap) AcceptUniStream() (ReceiveStream, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	var str receiveStreamI
+	for {
+		var ok bool
+		if m.closeErr != nil {
+			return nil, m.closeErr
+		}
+		str, ok = m.incomingUniStreams[m.nextUniStreamToAccept]
+		if ok {
+			break
+		}
+		m.acceptUniStreamOrErrCond.Wait()
+	}
+	m.nextUniStreamToAccept += 4
 	return str, nil
 }
 
 func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	_, ok := m.streams[id]
-	if !ok {
+	if _, ok := m.streams[id]; !ok {
 		return errMapAccess
 	}
 	delete(m.streams, id)
 	m.openStreamOrErrCond.Signal()
+	return nil
+}
+
+func (m *streamsMap) putSendStream(s sendStreamI) error {
+	id := s.StreamID()
+	if _, ok := m.outgoingUniStream[id]; ok {
+		return fmt.Errorf("a stream with ID %d already exists", id)
+	}
+	m.outgoingUniStreams[id] = s
 	return nil
 }
 
@@ -215,8 +295,10 @@ func (m *streamsMap) CloseWithError(err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.closeErr = err
-	m.nextStreamOrErrCond.Broadcast()
+	m.acceptStreamOrErrCond.Broadcast()
+	m.acceptUniStreamOrErrCond.Broadcast()
 	m.openStreamOrErrCond.Broadcast()
+	m.openUniStreamOrErrCond.Broadcast()
 	for _, s := range m.streams {
 		s.closeForShutdown(err)
 	}
@@ -233,4 +315,5 @@ func (m *streamsMap) UpdateLimits(params *handshake.TransportParameters) {
 	}
 	m.mutex.Unlock()
 	m.openStreamOrErrCond.Broadcast()
+	m.openUniStreamOrErrCond.Broadcast()
 }
