@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -27,6 +29,9 @@ func newReceivedPacketHistory() *receivedPacketHistory {
 // ReceivedPacket registers a packet with PacketNumber p and updates the ranges
 func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
+		for el := h.ranges.Front(); el != nil; el = el.Next() {
+			fmt.Printf("from %d to %d\n", el.Value.Start, el.Value.End)
+		}
 		return errTooManyOutstandingReceivedAckRanges
 	}
 
