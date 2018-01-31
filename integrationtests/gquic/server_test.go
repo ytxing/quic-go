@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Server tests", func() {
+var _ = PDescribe("Server tests", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
