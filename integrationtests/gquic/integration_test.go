@@ -70,7 +70,7 @@ var _ = Describe("Integration tests", func() {
 				Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 			})
 
-			PIt("gets many copies of a file in parallel", func() {
+			It("gets many copies of a file in parallel", func() {
 				wg := sync.WaitGroup{}
 				for i := 0; i < 10; i++ {
 					wg.Add(1)
