@@ -9,4 +9,14 @@ fi
 
 if [ ${TESTMODE} == "integration" ]; then
   ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -noisyPendings=false -trace integrationtests/gquic
 fi
